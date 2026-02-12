@@ -12,7 +12,7 @@ import { EffectManager, AutoAttack, XPOrbPool, rollOrbTier, scaleOrbXP, ORB_TIER
 import { SKILL_IDS, createSkillEffect } from './effects/index.js';
 import { Player } from './entities/index.js';
 import { MeleeWeapon, ProjectileWeapon } from './weapons/index.js';
-import { XPSystem, XP, EnemyManager, SpawnSystem, EnemyAISystem, WeaponManager } from './systems/index.js';
+import { XPSystem, XP, EnemyManager, SpawnSystem, EnemyAISystem, WeaponManager, PLAYER } from './systems/index.js';
 import { AlienAnimationSystem } from './systems/AlienAnimationSystem.js';
 import { SlimeAnimationSystem } from './systems/SlimeAnimationSystem.js';
 import { getEnemyType } from './data/index.js';
@@ -82,6 +82,13 @@ let magnetFullScreenUntil = 0;
 let levelUpSlowMotionUntil = 0;
 let rareDropShakeUntil = 0;
 let rareDropFlashUntil = 0;
+let playerHitCooldownUntil = 0;  // timestamp (seconds) until player can be hit again
+let playerHitShakeUntil = 0;     // screen shake timer on player hit
+let playerKnockbackVel = { x: 0, y: 0 };  // knockback velocity applied to player
+let currentRound = 1;
+let roundTimer = 0;  // seconds elapsed in current round
+const ROUND_DURATION = 60;  // seconds per round
+const CONTACT_RADIUS = 3.5; // distance at which enemies deal contact damage
 let enemies = [];
 let orbs = [];
 let keys = {};
@@ -406,6 +413,78 @@ function dropOrbs(x, y) {
   }
 }
 
+function checkPlayerEnemyCollisions(dt) {
+  if (gameOver) return;
+  const now = performance.now() * 0.001;
+  if (now < playerHitCooldownUntil) {
+    // Apply knockback decay during invulnerability
+    playerKnockbackVel.x *= 0.88;
+    playerKnockbackVel.y *= 0.88;
+    if (Math.abs(playerKnockbackVel.x) < 0.01) playerKnockbackVel.x = 0;
+    if (Math.abs(playerKnockbackVel.y) < 0.01) playerKnockbackVel.y = 0;
+    playerPos.x += playerKnockbackVel.x * 60 * dt;
+    playerPos.y += playerKnockbackVel.y * 60 * dt;
+    // Flash red during invulnerability (blink effect)
+    const blinkOn = Math.floor(now * 10) % 2 === 0;
+    if (playerMesh && playerMesh.material) {
+      playerMesh.material.opacity = blinkOn ? 0.4 : 1.0;
+    }
+    return;
+  }
+  // Reset opacity after invulnerability ends
+  if (playerMesh && playerMesh.material && playerMesh.material.opacity < 1.0) {
+    playerMesh.material.opacity = 1.0;
+    if (playerMesh.material.color) playerMesh.material.color.setHex(0xffffff);
+  }
+
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const dx = e.pos.x - playerPos.x;
+    const dy = e.pos.y - playerPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < CONTACT_RADIUS) {
+      // Determine contact damage based on enemy type
+      let contactDmg = e.damage || 5;
+      if (e.isBoss) contactDmg = 30;
+      else if (e.type === 'alien') contactDmg = 10;
+      else if (e.type === 'slime') contactDmg = 5;
+
+      // Apply damage to player
+      if (playerEntity) {
+        playerEntity.takeDamage(contactDmg);
+        health = playerEntity.hp;
+        maxHealth = playerEntity.maxHp;
+      } else {
+        health = Math.max(0, health - contactDmg);
+      }
+
+      // Set invulnerability window
+      playerHitCooldownUntil = now + (PLAYER.HIT_INVULNERABILITY_MS / 1000);
+
+      // Knockback: push player away from enemy
+      const kbStr = PLAYER.KNOCKBACK_STRENGTH;
+      const nLen = dist > 0.01 ? dist : 1;
+      playerKnockbackVel.x = (-dx / nLen) * kbStr;
+      playerKnockbackVel.y = (-dy / nLen) * kbStr;
+
+      // Screen shake on hit
+      playerHitShakeUntil = 0.25;
+
+      // Red flash on player mesh
+      if (playerMesh && playerMesh.material && playerMesh.material.color) {
+        playerMesh.material.color.setHex(0xff3333);
+      }
+
+      // Check for death
+      if (health <= 0) {
+        endGame();
+        return;
+      }
+      break; // Only one hit per frame
+    }
+  }
+}
+
 function createOrbSprite(tex) {
   const mat = new THREE.MeshBasicMaterial({
     map: tex,
@@ -511,6 +590,9 @@ function updatePlayer(dt) {
 function updateEnemies(dt) {
   if (!enemyManager || !enemyAISystem) return;
   for (const e of enemies) e.update(dt);
+  // Scale aggression based on enemy count relative to round cap
+  const maxForRound = Math.min(200, 10 + (currentRound - 1) * 8);
+  enemyAISystem.setAggressionFromCount(enemies.length, maxForRound);
   enemyAISystem.update(dt, enemies);
 }
 
@@ -543,6 +625,7 @@ function updateOrbs(dt) {
 function updateSpawn(now) {
   if (!spawnSystem || !difficultyManager) return;
   const elapsedMinutes = elapsedTime / 60;
+  spawnSystem.setRound(currentRound);
   spawnSystem.setSpawnIntervalMultiplier(elapsedMinutes);
   spawnSystem.update(now, elapsedMinutes);
 }
@@ -571,6 +654,18 @@ function updateHUD() {
     if (levelUpFlashTime > 0) xpBarWrap.classList.add('xp-level-up-flash');
     else xpBarWrap.classList.remove('xp-level-up-flash');
   }
+  // HP numbers
+  const hpTextEl = document.getElementById('hud-hp-text');
+  if (hpTextEl) hpTextEl.textContent = Math.ceil(health) + '/' + Math.ceil(maxHealth);
+
+  // Round display
+  const roundEl = document.getElementById('hud-round');
+  if (roundEl) roundEl.textContent = 'Round ' + currentRound;
+
+  // Enemies alive
+  const enemiesEl = document.getElementById('hud-enemies');
+  if (enemiesEl) enemiesEl.textContent = 'Enemies: ' + enemies.filter(e => !e.dead).length;
+
   if (levelEl) levelEl.textContent = 'Level ' + level;
   if (timeEl) timeEl.textContent = formatTime(elapsedTime);
   if (diffEl && difficultyManager) diffEl.textContent = 'Difficulty ' + difficultyManager.getDifficultyLevel();
@@ -622,7 +717,7 @@ function updateWeaponIcons() {
 
 function updateUI() {
   updateHUD();
-  document.getElementById('health').textContent = 'Health: ' + health;
+  document.getElementById('health').textContent = 'HP: ' + Math.ceil(health) + '/' + Math.ceil(maxHealth);
   document.getElementById('energy').textContent = 'Energy: ' + energy + '/10';
   document.getElementById('power').textContent = 'Power: ' + power + '/100';
   document.getElementById('level').textContent = 'Level: ' + level;
@@ -690,10 +785,17 @@ function showLevelUpChoices() {
 
 function endGame() {
   gameOver = true;
+  // Reset player visual state
+  if (playerMesh && playerMesh.material) {
+    playerMesh.material.opacity = 1.0;
+    if (playerMesh.material.color) playerMesh.material.color.setHex(0xffffff);
+  }
   const ft = document.getElementById('final-time');
   const tk = document.getElementById('total-kills');
+  const fr = document.getElementById('final-round');
   if (ft) ft.textContent = 'You Survived: ' + formatTime(elapsedTime);
   if (tk) tk.textContent = 'Total Kills: ' + totalKills;
+  if (fr) fr.textContent = 'Reached Round: ' + currentRound;
   document.getElementById('gameover').style.display = 'flex';
   const cursorEl = document.getElementById('cursor-trail');
   if (cursorEl) cursorEl.style.display = 'block';
@@ -719,11 +821,21 @@ function gameLoop(time = 0) {
     return;
   }
 
-  if (difficultyManager) difficultyManager.update(dt, elapsedTime, level, totalKills);
+  if (difficultyManager) {
+    difficultyManager.setRound(currentRound);
+    difficultyManager.update(dt, elapsedTime, level, totalKills);
+  }
   updatePlayer(dt);
   if (enemyManager) enemies = enemyManager.getActive();
   updateEnemies(dt);
+  checkPlayerEnemyCollisions(dt);
   updateOrbs(dt);
+  // Update round timer
+  roundTimer += rawDt;
+  if (roundTimer >= ROUND_DURATION) {
+    roundTimer -= ROUND_DURATION;
+    currentRound++;
+  }
   const liveEnemies = enemies.filter(e => !e.dead);
   if (playerEntity) {
     playerEntity.x = playerPos.x;
@@ -762,17 +874,32 @@ function gameLoop(time = 0) {
   if (levelUpSlowMotionUntil > 0) levelUpSlowMotionUntil -= rawDt;
   if (rareDropShakeUntil > 0) rareDropShakeUntil -= rawDt;
   if (rareDropFlashUntil > 0) rareDropFlashUntil -= rawDt;
+  if (playerHitShakeUntil > 0) playerHitShakeUntil -= rawDt;
+  const hitShakeIntensity = playerHitShakeUntil > 0 ? 0.6 : 0;
+  const dropShakeIntensity = rareDropShakeUntil > 0 ? 0.2 : 0;
+  const shakeIntensity = Math.max(hitShakeIntensity, dropShakeIntensity);
+  const shakeX = shakeIntensity > 0 ? (Math.random() - 0.5) * shakeIntensity : 0;
+  const shakeY = shakeIntensity > 0 ? (Math.random() - 0.5) * shakeIntensity : 0;
+
+  // Hit red flash overlay
+  const hitFlashEl = document.getElementById('hit-flash');
+  if (hitFlashEl) hitFlashEl.style.opacity = String(playerHitShakeUntil > 0 ? Math.min(1, playerHitShakeUntil / 0.15) : 0);
+
+  // Absorb / rare drop flash
   const flashEl = document.getElementById('absorb-flash');
   const flashOpacity = absorbEffectTime > 0 ? 0.35 * (absorbEffectTime / 0.2)
     : rareDropFlashUntil > 0 ? 0.5 * (rareDropFlashUntil / 0.15) : 0;
   if (flashEl) flashEl.style.opacity = String(flashOpacity);
+
+  // Level-up pulse
   const pulseEl = document.getElementById('level-up-pulse');
   if (pulseEl) pulseEl.classList.toggle('active', levelUpFlashTime > 0);
-  if (playerMesh.material.color) {
+
+  // Player tint on level-up (only if not in hit invulnerability)
+  if (playerMesh.material.color && performance.now() * 0.001 >= playerHitCooldownUntil) {
     playerMesh.material.color.setHex(levelUpFlashTime > 0 ? 0x88aaff : 0xffffff);
   }
-  const shakeX = rareDropShakeUntil > 0 ? (Math.random() - 0.5) * 0.2 : 0;
-  const shakeY = rareDropShakeUntil > 0 ? (Math.random() - 0.5) * 0.2 : 0;
+
   gameLoop.lastDt = dt;
   updateSpawn(time / 1000);
   updateUI();
@@ -795,7 +922,7 @@ function startGame() {
   document.body.classList.remove('menu-open');
 
   xpSystem = new XPSystem();
-  playerEntity = new Player({ hp: 3, maxHp: 3, xp: 0, level: 1 });
+  playerEntity = new Player({ hp: PLAYER.BASE_HP, maxHp: PLAYER.BASE_HP, xp: 0, level: 1 });
   playerEntity.xpToNextLevel = Math.floor(XP.BASE_XP * 1 * XP.XP_SCALE);
   weaponManager = new WeaponManager();
   weaponManager.addWeapon(new MeleeWeapon({ name: 'Slash', damage: 12, cooldown: 1.0, radius: 3.5 }));
@@ -815,6 +942,11 @@ function startGame() {
   magnetFullScreenUntil = 0;
   rareDropShakeUntil = 0;
   rareDropFlashUntil = 0;
+  playerHitCooldownUntil = 0;
+  playerHitShakeUntil = 0;
+  playerKnockbackVel = { x: 0, y: 0 };
+  currentRound = 1;
+  roundTimer = 0;
   totalKills = 0;
   levelUpPaused = false;
   chosenUpgradeIds.clear();
