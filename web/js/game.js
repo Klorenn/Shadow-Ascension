@@ -16,6 +16,15 @@ import { XPSystem, XP, EnemyManager, SpawnSystem, EnemyAISystem, WeaponManager }
 import { AlienAnimationSystem } from './systems/AlienAnimationSystem.js';
 import { SlimeAnimationSystem } from './systems/SlimeAnimationSystem.js';
 import { getEnemyType } from './data/index.js';
+import {
+  generatePlayerIdle, generatePlayerWalk,
+  generateSlimeIdle, generateSlimeWalk, generateSlimeRun,
+  generateSlimeAttack, generateSlimeHurt, generateSlimeDeath,
+  generateAlienIdle, generateAlienWalk, generateAlienHurt, generateAlienAttack,
+  generateBossSheet,
+  generateRedOrb, generateGreenOrb, generateBlueOrb,
+  generateGrass, generateZone,
+} from './ProceduralSprites.js';
 
 // --- Constants
 const PLAYER_SPEED = 0.35;
@@ -105,6 +114,31 @@ function pixelFilter(t) {
   return t;
 }
 
+/** Create a Three.js texture from an HTMLCanvasElement, applying pixel-art filter. */
+function canvasTex(canvas) {
+  const t = new THREE.CanvasTexture(canvas);
+  pixelFilter(t);
+  return t;
+}
+
+/**
+ * Try loading a file texture; on failure, use a procedural canvas fallback.
+ * @param {THREE.TextureLoader} loader
+ * @param {string} path - url to try loading
+ * @param {Function} fallbackFn - () => HTMLCanvasElement
+ * @param {Function} [postProcess] - optional transform applied after pixelFilter
+ */
+function loadOrFallback(loader, path, fallbackFn, postProcess) {
+  return loader.loadAsync(path)
+    .then(pixelFilter)
+    .then(t => postProcess ? postProcess(t) : t)
+    .catch(() => {
+      const c = fallbackFn();
+      const t = canvasTex(c);
+      return postProcess ? postProcess(t) : t;
+    });
+}
+
 // Spritesheet con 4 direcciones: numFrames columnas, numRows filas (64px cada celda)
 function playerSpriteSheetUV(t, numFrames, numRows) {
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
@@ -139,84 +173,52 @@ function loadTextures(variant = 1) {
   const v = Math.max(1, Math.min(3, variant));
   const idlePath = `${ASSET_BASE}/player/Vampires${v}_Idle_with_shadow.png`;
   const walkPath = `${ASSET_BASE}/player/Vampires${v}_Walk_with_shadow.png`;
+
+  const playerIdleP = loadOrFallback(loader, idlePath, generatePlayerIdle,
+    t => playerSpriteSheetUV(t, PLAYER_IDLE_FRAMES, PLAYER_IDLE_ROWS));
+  const playerWalkP = loadOrFallback(loader, walkPath, generatePlayerWalk,
+    t => playerSpriteSheetUV(t, PLAYER_WALK_FRAMES, PLAYER_WALK_ROWS));
+
+  const bossP = loadOrFallback(loader,
+    `${ASSET_BASE}/mobs/bringer/Bringer-of-Death-SpritSheet.png`,
+    generateBossSheet);
+
+  const slimeIdleP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Idle.png`, generateSlimeIdle, singleFrameUV64);
+  const slimeWalkP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Walk.png`, generateSlimeWalk, singleFrameUV64);
+  const slimeRunP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Run.png`, generateSlimeRun, singleFrameUV64);
+  const slimeAttackP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Attack.png`, generateSlimeAttack, singleFrameUV64);
+  const slimeHurtP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Hurt.png`, generateSlimeHurt, singleFrameUV64);
+  const slimeDeathP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Death.png`, generateSlimeDeath, singleFrameUV64);
+
+  const alienIdleP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/standard/idle.png`, generateAlienIdle, singleFrameUV64);
+  const alienWalkP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/standard/walk.png`, generateAlienWalk, singleFrameUV64);
+  const alienHurtP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/standard/hurt.png`, generateAlienHurt, singleFrameUV64);
+  const alienAttackP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/custom/slash_128.png`, generateAlienAttack, singleFrameUV64);
+
+  const redOrbP = loadOrFallback(loader, `${ASSET_BASE}/level-up/red-orb.png`, generateRedOrb);
+  const greenOrbP = loadOrFallback(loader, `${ASSET_BASE}/level-up/green-orb.png`, generateGreenOrb);
+  const blueOrbP = loadOrFallback(loader, `${ASSET_BASE}/level-up/blue-orb.png`, generateBlueOrb);
+
+  const grassP = loadOrFallback(loader, assetUrl('map/grass.png'), generateGrass);
+
   const zoneLoads = [0, 1, 2, 3, 4].map(i =>
-    loader.loadAsync(zoneImageUrl(i)).then(pixelFilter).catch(() => null)
+    loadOrFallback(loader, zoneImageUrl(i), () => generateZone(i))
   );
-  const slimeIdle = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Idle.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeWalk = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Walk.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeRun = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Run.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeAttack = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Attack.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeHurt = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Hurt.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeDeath = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Death.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienIdle = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/standard/idle.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienWalk = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/standard/walk.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienHurt = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/standard/hurt.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienAttack = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/custom/slash_128.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
+
   return Promise.all([
-    loader.loadAsync(idlePath).then(pixelFilter).then(t => playerSpriteSheetUV(t, PLAYER_IDLE_FRAMES, PLAYER_IDLE_ROWS)),
-    loader.loadAsync(walkPath).then(pixelFilter).then(t => playerSpriteSheetUV(t, PLAYER_WALK_FRAMES, PLAYER_WALK_ROWS)),
-    loader.loadAsync(`${ASSET_BASE}/mobs/bringer/Bringer-of-Death-SpritSheet.png`).then(pixelFilter),
-    slimeIdle,
-    slimeWalk,
-    slimeRun,
-    slimeAttack,
-    slimeHurt,
-    slimeDeath,
-    loader.loadAsync(`${ASSET_BASE}/level-up/red-orb.png`).then(pixelFilter),
-    loader.loadAsync(`${ASSET_BASE}/level-up/green-orb.png`).then(pixelFilter),
-    loader.loadAsync(`${ASSET_BASE}/level-up/blue-orb.png`).then(pixelFilter),
-    loader.loadAsync(assetUrl('map/grass.png')).then(pixelFilter),
-    alienIdle,
-    alienWalk,
-    alienHurt,
-    alienAttack,
+    playerIdleP, playerWalkP, bossP,
+    slimeIdleP, slimeWalkP, slimeRunP, slimeAttackP, slimeHurtP, slimeDeathP,
+    redOrbP, greenOrbP, blueOrbP, grassP,
+    alienIdleP, alienWalkP, alienHurtP, alienAttackP,
     ...zoneLoads
   ]).then(results => {
-    const [playerIdle, playerWalk, enemy, slimeIdleTex, slimeWalkTex, slimeRunTex, slimeAttackTex, slimeHurtTex, slimeDeathTex, redOrb, greenOrb, blueOrb, grass, alienIdleTex, alienWalkTex, alienHurtTex, alienAttackTex, ...zones] = results;
+    const [playerIdle, playerWalk, enemy,
+      slimeIdleTex, slimeWalkTex, slimeRunTex, slimeAttackTex, slimeHurtTex, slimeDeathTex,
+      redOrb, greenOrb, blueOrb, grass,
+      alienIdleTex, alienWalkTex, alienHurtTex, alienAttackTex,
+      ...zones] = results;
     return {
-      playerIdle,
-      playerWalk,
-      enemy,
+      playerIdle, playerWalk, enemy,
       slime: slimeIdleTex,
       slimeIdle: slimeIdleTex,
       slimeWalk: slimeWalkTex,
@@ -224,11 +226,7 @@ function loadTextures(variant = 1) {
       slimeAttack: slimeAttackTex,
       slimeHurt: slimeHurtTex,
       slimeDeath: slimeDeathTex,
-      redOrb,
-      greenOrb,
-      blueOrb,
-      grass,
-      zones,
+      redOrb, greenOrb, blueOrb, grass, zones,
       alienIdle: alienIdleTex,
       alienWalk: alienWalkTex,
       alienHurt: alienHurtTex,
@@ -581,6 +579,21 @@ function updateHUD() {
     eventEl.textContent = ev ? 'Event: ' + ev.name.replace('_', ' ') : '';
   }
   updateWeaponIcons();
+  updateBossHealthBar();
+}
+
+function updateBossHealthBar() {
+  const bar = document.getElementById('boss-health-bar');
+  const fill = document.getElementById('boss-hp-fill');
+  if (!bar || !fill) return;
+  const boss = enemies.find(e => e.isBoss && !e.dead);
+  if (boss) {
+    bar.style.display = 'block';
+    const ratio = boss.getLifeBarRatio ? boss.getLifeBarRatio() : (boss.maxHp > 0 ? boss.hp / boss.maxHp : 0);
+    fill.style.width = Math.max(0, Math.min(100, ratio * 100)) + '%';
+  } else {
+    bar.style.display = 'none';
+  }
 }
 
 function updateWeaponIcons() {

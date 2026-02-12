@@ -262,6 +262,12 @@
     <h3>Level Up! Choose an upgrade:</h3>
     <div class="upgrade-cards" id="upgrade-cards"></div>
   </div>
+  <div id="boss-health-bar" style="display:none; position:fixed; bottom:60px; left:50%; transform:translateX(-50%); width:320px; z-index:12; pointer-events:none; text-align:center;">
+    <span id="boss-name" style="font-size:0.5rem; color:#f88; display:block; margin-bottom:4px;">BOSS</span>
+    <div style="width:100%; height:14px; background:rgba(0,0,0,0.7); border:2px solid #844;">
+      <div id="boss-hp-fill" style="height:100%; width:100%; background:linear-gradient(90deg,#a22,#e44); transition:width 0.15s;"></div>
+    </div>
+  </div>
   <div id="absorb-flash" aria-hidden="true"></div>
   <div id="level-up-pulse" aria-hidden="true"></div>
   <div id="hud" style="display: none;">

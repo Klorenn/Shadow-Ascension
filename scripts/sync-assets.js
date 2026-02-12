@@ -9,7 +9,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
+// __dirname in the sandbox may resolve to /home/scripts, so we also
+// try the known Vercel sandbox project path.  We check for package.json
+// alongside assets/ to pick the right project root.
+const candidates = [
+  '/vercel/share/v0-project',
+  path.resolve(__dirname, '..'),
+];
+const ROOT = candidates.find(c =>
+  fs.existsSync(path.join(c, 'assets')) && fs.existsSync(path.join(c, 'package.json'))
+) || candidates[0];
+console.log('ROOT resolved to:', ROOT);
 const SRC = path.join(ROOT, 'assets');
 const DST = path.join(ROOT, 'web', 'assets');
 
