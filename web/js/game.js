@@ -359,23 +359,29 @@ function createMeshForEnemyType(typeId) {
       alien: new THREE.PlaneGeometry(getEnemyType('alien').scale, getEnemyType('alien').scale),
     };
   }
-  _enemyMats = _enemyMats || {};
-  if (!_enemyMats[typeId]) {
-    const tex =
-      typeId === 'alien'
-        ? textures.alienIdle
-        : (textures.slimeIdle || textures.slime);
-    if (!tex) return null;
-    _enemyMats[typeId] = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: true,
-    });
-  }
+  // Each enemy gets its OWN material with its OWN texture clone so that
+  // the animation system can independently set offset/repeat per sprite.
+  const baseTex =
+    typeId === 'alien'
+      ? textures.alienIdle
+      : (textures.slimeIdle || textures.slime);
+  if (!baseTex) return null;
+
+  const tex = baseTex.clone();
+  tex.needsUpdate = true;
+  // Carry over userData (numFrames, numRows, frameWidth, etc.) for SpriteAnimator
+  tex.userData = { ...(baseTex.userData || {}) };
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: true,
+  });
+
   const config = getEnemyType(typeId);
   const geo = _enemyGeos[typeId] || _enemyGeos.slime;
-  return new THREE.Mesh(geo, _enemyMats[typeId]);
+  return new THREE.Mesh(geo, mat);
 }
 
 const MAGNET_BASE_RADIUS = 6;
@@ -1079,7 +1085,6 @@ function getSelectedVampireVariant() {
 }
 
 function main() {
-  console.log('[v0] main() called, ASSET_BASE =', ASSET_BASE);
   const btnStart = document.getElementById('btn-start');
   const btnRestart = document.getElementById('btn-restart');
   const variantBtns = document.querySelectorAll('.variant-btn');
@@ -1096,19 +1101,16 @@ function main() {
     const variant = getSelectedVampireVariant();
     btnStart.disabled = true;
     btnStart.textContent = 'Cargando...';
-    console.log('[v0] Loading textures, variant =', variant);
     loadTextures(variant)
       .then(t => {
-        console.log('[v0] Textures loaded:', Object.keys(t));
         textures = t;
         initThree();
-        console.log('[v0] Three.js initialized, starting game');
         btnStart.textContent = 'Jugar';
         btnStart.disabled = false;
         startGame();
       })
       .catch(err => {
-        console.error('[v0] Error loading assets:', err);
+        console.error('Error loading assets:', err);
         btnStart.textContent = 'Error cargando';
         btnStart.disabled = false;
       });

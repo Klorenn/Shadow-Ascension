@@ -107,26 +107,57 @@ function drawSlimeFrame(ctx, col, row, cellW, cellH, anim, frame) {
   const cy = oy + cellH / 2;
   const p = 3;
 
-  // Shadow
+  // Per-frame phase for pronounced animation
+  const phase = (frame / 4) * Math.PI * 2;
+
+  // Shadow (size pulses with body)
+  const shadowW = 5 * p + Math.sin(phase) * 0.5 * p;
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.beginPath();
-  ctx.ellipse(cx, oy + cellH - 3 * p, 5 * p, 1.5 * p, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, oy + cellH - 3 * p, shadowW, 1.5 * p, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Body squash/stretch based on animation
+  // Body squash/stretch - pronounced per-frame variation
   let bw = 6 * p, bh = 5 * p;
   let bodyY = cy;
-  if (anim === 'attack') {
-    bw = 7 * p;
-    bh = 4 * p;
-    bodyY = cy + p;
-  } else if (anim === 'hurt' || anim === 'death') {
-    bw = 7 * p;
-    bh = 3 * p;
-    bodyY = cy + 2 * p;
-  } else if (anim === 'walk' || anim === 'run') {
-    const bounce = Math.sin(frame * 1.5) * p;
+  if (anim === 'idle') {
+    // Gentle breathing / pulsing
+    const pulse = Math.sin(phase) * 1.2 * p;
+    bw = 6 * p + pulse * 0.4;
+    bh = 5 * p - pulse * 0.3;
+    bodyY = cy - pulse * 0.2;
+  } else if (anim === 'walk') {
+    // Bouncy hop cycle
+    const bounce = Math.sin(phase) * 2.5 * p;
     bodyY = cy + bounce;
+    bw = 6 * p - Math.abs(bounce) * 0.3;
+    bh = 5 * p + Math.abs(bounce) * 0.3;
+  } else if (anim === 'run') {
+    // Faster, more extreme bounce
+    const bounce = Math.sin(phase * 1.5) * 3 * p;
+    bodyY = cy + bounce;
+    bw = 5.5 * p - Math.abs(bounce) * 0.4;
+    bh = 5.5 * p + Math.abs(bounce) * 0.4;
+  } else if (anim === 'attack') {
+    // Squash down then spring forward
+    const t = frame / 3; // 0..1 across 4 frames
+    bw = 6 * p + t * 3 * p;
+    bh = 5 * p - t * 2 * p;
+    bodyY = cy + t * 2 * p;
+  } else if (anim === 'hurt') {
+    // Flatten and shake
+    bw = 7 * p;
+    bh = 3.5 * p;
+    bodyY = cy + 2 * p;
+    const shake = (frame % 2 === 0 ? 1 : -1) * p;
+    ctx.translate(shake, 0);
+  } else if (anim === 'death') {
+    // Progressively flatten and fade
+    const t = frame / 3;
+    bw = 6 * p + t * 3 * p;
+    bh = 5 * p * (1 - t * 0.7);
+    bodyY = cy + t * 4 * p;
+    ctx.globalAlpha = 1 - t * 0.5;
   }
 
   // Main body (green blob)
@@ -135,36 +166,37 @@ function drawSlimeFrame(ctx, col, row, cellW, cellH, anim, frame) {
   ctx.ellipse(cx, bodyY, bw / 2, bh / 2, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  // Darker underside
+  ctx.fillStyle = '#33aa33';
+  ctx.beginPath();
+  ctx.ellipse(cx, bodyY + bh * 0.15, bw / 2.2, bh / 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
   // Highlight
   ctx.fillStyle = '#66ee66';
   ctx.beginPath();
-  ctx.ellipse(cx - p, bodyY - p, bw / 4, bh / 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - p, bodyY - p * 1.2, bw / 4.5, bh / 4.5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eyes
+  // Eyes (not on death)
   if (anim !== 'death') {
     ctx.fillStyle = '#111';
     ctx.fillRect(cx - 2 * p, bodyY - 1.5 * p, 1.5 * p, 1.5 * p);
     ctx.fillRect(cx + 0.5 * p, bodyY - 1.5 * p, 1.5 * p, 1.5 * p);
-
-    // Pupils
     ctx.fillStyle = '#fff';
     ctx.fillRect(cx - 1.5 * p, bodyY - 1 * p, p * 0.7, p * 0.7);
     ctx.fillRect(cx + 1 * p, bodyY - 1 * p, p * 0.7, p * 0.7);
-  }
-
-  // Death X eyes
-  if (anim === 'death') {
+  } else {
+    // Death X eyes
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = '#111';
     ctx.lineWidth = 2;
-    // Left X
     ctx.beginPath();
     ctx.moveTo(cx - 2.5 * p, bodyY - 2 * p);
     ctx.lineTo(cx - 0.5 * p, bodyY);
     ctx.moveTo(cx - 0.5 * p, bodyY - 2 * p);
     ctx.lineTo(cx - 2.5 * p, bodyY);
     ctx.stroke();
-    // Right X
     ctx.beginPath();
     ctx.moveTo(cx + 0.5 * p, bodyY - 2 * p);
     ctx.lineTo(cx + 2.5 * p, bodyY);
@@ -172,6 +204,10 @@ function drawSlimeFrame(ctx, col, row, cellW, cellH, anim, frame) {
     ctx.lineTo(cx + 0.5 * p, bodyY);
     ctx.stroke();
   }
+
+  // Reset transforms
+  ctx.globalAlpha = 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 function generateSlimeSheet(anim, numFrames) {
@@ -202,55 +238,80 @@ function drawAlienFrame(ctx, col, row, cellW, cellH, anim, frame) {
   const cy = oy + cellH / 2;
   const p = 3;
 
+  // Per-frame phase for smooth animation cycles
+  const totalFrames = anim === 'idle' ? 9 : (anim === 'walk' ? 9 : 6);
+  const phase = (frame / totalFrames) * Math.PI * 2;
+
   // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.beginPath();
   ctx.ellipse(cx, oy + cellH - 2 * p, 4 * p, p, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  // Body bob for walking
+  let bodyOff = 0;
+  if (anim === 'walk') bodyOff = Math.sin(phase) * 1.5 * p;
+  else if (anim === 'idle') bodyOff = Math.sin(phase) * 0.5 * p;
+
   // Body (grey-blue humanoid)
   ctx.fillStyle = '#556688';
-  ctx.fillRect(cx - 2.5 * p, cy - 4 * p, 5 * p, 8 * p);
+  ctx.fillRect(cx - 2.5 * p, cy - 4 * p + bodyOff, 5 * p, 8 * p);
 
   // Head (big, alien)
   ctx.fillStyle = '#778899';
   ctx.beginPath();
-  ctx.ellipse(cx, cy - 6 * p, 3 * p, 3 * p, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy - 6 * p + bodyOff, 3 * p, 3 * p, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Eyes (big, black, alien)
   ctx.fillStyle = '#112233';
   ctx.beginPath();
-  ctx.ellipse(cx - 1.2 * p, cy - 6.5 * p, 1.2 * p, 1.5 * p, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(cx - 1.2 * p, cy - 6.5 * p + bodyOff, 1.2 * p, 1.5 * p, -0.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(cx + 1.2 * p, cy - 6.5 * p, 1.2 * p, 1.5 * p, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(cx + 1.2 * p, cy - 6.5 * p + bodyOff, 1.2 * p, 1.5 * p, 0.2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eye glow
-  ctx.fillStyle = '#44ffaa';
+  // Eye glow - pulses in idle
+  const glowSize = anim === 'idle' ? 0.5 + Math.sin(phase * 2) * 0.15 : 0.5;
+  ctx.fillStyle = anim === 'hurt' ? '#ff4444' : '#44ffaa';
   ctx.beginPath();
-  ctx.ellipse(cx - 1.2 * p, cy - 6.5 * p, 0.5 * p, 0.6 * p, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - 1.2 * p, cy - 6.5 * p + bodyOff, glowSize * p, (glowSize + 0.1) * p, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(cx + 1.2 * p, cy - 6.5 * p, 0.5 * p, 0.6 * p, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + 1.2 * p, cy - 6.5 * p + bodyOff, glowSize * p, (glowSize + 0.1) * p, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Legs
-  const legAnim = Math.sin(frame * 1.3) * p;
+  // Legs - pronounced walk cycle
+  const legSwing = anim === 'walk' ? Math.sin(phase) * 2.5 * p
+    : anim === 'idle' ? Math.sin(phase) * 0.3 * p : 0;
   ctx.fillStyle = '#445566';
-  ctx.fillRect(cx - 2 * p, cy + 4 * p + legAnim, 1.5 * p, 3 * p);
-  ctx.fillRect(cx + 0.5 * p, cy + 4 * p - legAnim, 1.5 * p, 3 * p);
+  ctx.fillRect(cx - 2 * p, cy + 4 * p + legSwing + bodyOff, 1.5 * p, 3 * p);
+  ctx.fillRect(cx + 0.5 * p, cy + 4 * p - legSwing + bodyOff, 1.5 * p, 3 * p);
 
   // Arms
   ctx.fillStyle = '#556688';
   if (anim === 'attack') {
-    // Arms forward
-    ctx.fillRect(cx - 4 * p, cy - 2 * p, 2 * p, 2 * p);
-    ctx.fillRect(cx + 2 * p, cy - 2 * p, 2 * p, 2 * p);
+    // Arms thrust forward progressively
+    const t = frame / 5; // 0..1 across 6 frames
+    const reach = t * 3 * p;
+    ctx.fillRect(cx - 4 * p - reach, cy - 2 * p + bodyOff, 2 * p, 2 * p);
+    ctx.fillRect(cx + 2 * p + reach, cy - 2 * p + bodyOff, 2 * p, 2 * p);
+  } else if (anim === 'hurt') {
+    // Arms flung back
+    ctx.fillRect(cx - 4.5 * p, cy + bodyOff, 1.5 * p, 3 * p);
+    ctx.fillRect(cx + 3 * p, cy + bodyOff, 1.5 * p, 3 * p);
   } else {
-    ctx.fillRect(cx - 3.5 * p, cy - 1 * p, 1.5 * p, 4 * p);
-    ctx.fillRect(cx + 2 * p, cy - 1 * p, 1.5 * p, 4 * p);
+    // Normal arm swing synced with legs
+    const armSwing = anim === 'walk' ? Math.sin(phase + Math.PI) * 1.5 * p : 0;
+    ctx.fillRect(cx - 3.5 * p, cy - 1 * p + armSwing + bodyOff, 1.5 * p, 4 * p);
+    ctx.fillRect(cx + 2 * p, cy - 1 * p - armSwing + bodyOff, 1.5 * p, 4 * p);
+  }
+
+  // Hurt flash tint
+  if (anim === 'hurt') {
+    ctx.fillStyle = 'rgba(255,50,50,0.25)';
+    ctx.fillRect(ox, oy, cellW, cellH);
   }
 }
 

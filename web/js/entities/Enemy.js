@@ -126,7 +126,8 @@ export class Enemy {
 
   update(delta) {
     if (this.dead) return;
-    if (this._animator) this._animator.update(delta);
+    // Note: _animator.update() is called by the animation system (Slime/AlienAnimationSystem),
+    // NOT here, to avoid double-updating and 2x speed animations.
     if (this._flashUntil > 0 && this.mesh?.material?.color) {
       const now = typeof performance !== 'undefined' ? performance.now() * 0.001 : 0;
       this.mesh.material.color.setHex(now < this._flashUntil ? 0xff4444 : 0xffffff);

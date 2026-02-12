@@ -25,6 +25,7 @@ export class SlimeEnemy extends Enemy {
 
   update(delta) {
     super.update(delta);
+    // Animation system must run even when dead (for death animation playback)
     if (this.animSystem) this.animSystem.updateEnemy(this, delta);
   }
 

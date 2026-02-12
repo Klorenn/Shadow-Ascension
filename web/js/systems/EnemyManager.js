@@ -108,19 +108,26 @@ export class EnemyManager {
 
   _onDeath(enemy) {
     enemy.state = 'death';
-    if (enemy.mesh) {
-      if (enemy._eliteOutline) {
-        enemy.mesh.remove(enemy._eliteOutline);
-        enemy._eliteOutline = null;
-      }
-      this.scene.remove(enemy.mesh);
-      this._returnMesh(enemy.type, enemy.mesh);
-      enemy.setMesh(null);
-    }
+
+    // Spawn XP orbs / drops immediately
     if (this.onEnemyDeath) this.onEnemyDeath(enemy);
-    const idx = this._active.indexOf(enemy);
-    if (idx >= 0) this._active.splice(idx, 1);
-    this._pool.push(enemy);
+
+    // Delay mesh removal so death animation can play (400ms)
+    const DEATH_ANIM_MS = 400;
+    setTimeout(() => {
+      if (enemy.mesh) {
+        if (enemy._eliteOutline) {
+          enemy.mesh.remove(enemy._eliteOutline);
+          enemy._eliteOutline = null;
+        }
+        this.scene.remove(enemy.mesh);
+        this._returnMesh(enemy.type, enemy.mesh);
+        enemy.setMesh(null);
+      }
+      const idx = this._active.indexOf(enemy);
+      if (idx >= 0) this._active.splice(idx, 1);
+      this._pool.push(enemy);
+    }, DEATH_ANIM_MS);
   }
 
   getActive() {
