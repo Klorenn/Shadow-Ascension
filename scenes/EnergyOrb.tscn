@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=3 uid="uid://djl6hlokqj2m7"]
 
 [ext_resource type="Script" path="res://scripts/EnergyOrb.cs" id="1_cjuoi"]
-[ext_resource type="Texture2D" uid="uid://ewj3kfdcyfh0" path="res://assets/pickups/blue-orb.png" id="1_tuyt5"]
+[ext_resource type="Texture2D" uid="uid://ewj3kfdcyfh0" path="res://assets/level-up/blue-orb.png" id="1_tuyt5"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_70bxh"]
 radius = 3.0

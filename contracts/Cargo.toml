@@ -1,0 +1,5 @@
+[workspace]
+resolver = "2"
+members = ["stellar_survivor_arena"]
+
+[workspace.dependencies]

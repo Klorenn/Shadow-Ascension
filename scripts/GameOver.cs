@@ -55,7 +55,7 @@ public partial class GameOver : Control
 		if (GetNode<Button>("Menu/VBoxContainer/Play").HasFocus())
 		{
 			ResetGame();
-			GetTree().ChangeSceneToFile("res://scenes/Main.tscn");
+			GetTree().ChangeSceneToFile("res://scenes/main.tscn");
 		}
 		else
 		{

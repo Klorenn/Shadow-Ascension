@@ -1,169 +1,18 @@
-[gd_scene load_steps=26 format=3 uid="uid://nadoyp047mua"]
+[gd_scene load_steps=6 format=3 uid="uid://nadoyp047mua"]
+
+; Assets del personaje: SpriteFrames del pack Craftpix (vampire 4-direction).
+; Carga: res://assets/craftpix/vampire_4dir/vampire_sprite_frames.tres
+; Para usar otro sprite del pack: edita vampire_sprite_frames.tres y cambia
+; las rutas ExtResource (p. ej. Vampires2_* o Vampires3_*) o las regiones AtlasTexture.
 
 [ext_resource type="Script" path="res://scripts/Player.cs" id="1_r33hq"]
 [ext_resource type="PackedScene" uid="uid://6flsm0dmgium" path="res://scenes/Vaccuum.tscn" id="2_6mih2"]
-[ext_resource type="Texture2D" uid="uid://ciia4luln4rl4" path="res://assets/player-sheet.png" id="2_560ts"]
+[ext_resource type="SpriteFrames" path="res://assets/craftpix/vampire_4dir/vampire_sprite_frames.tres" id="2_vampire_frames"]
 [ext_resource type="AudioStream" uid="uid://wyjny708xsu2" path="res://assets/sounds/player-damage.mp3" id="3_nd6mk"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_une8k"]
 radius = 6.0
 height = 24.0
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_pb8mv"]
-atlas = ExtResource("2_560ts")
-region = Rect2(0, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_45kvu"]
-atlas = ExtResource("2_560ts")
-region = Rect2(32, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_h34l7"]
-atlas = ExtResource("2_560ts")
-region = Rect2(64, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_bssj5"]
-atlas = ExtResource("2_560ts")
-region = Rect2(96, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_l6v6i"]
-atlas = ExtResource("2_560ts")
-region = Rect2(128, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_xhkqb"]
-atlas = ExtResource("2_560ts")
-region = Rect2(160, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_yg43x"]
-atlas = ExtResource("2_560ts")
-region = Rect2(192, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_3oymv"]
-atlas = ExtResource("2_560ts")
-region = Rect2(224, 224, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_r5bla"]
-atlas = ExtResource("2_560ts")
-region = Rect2(0, 192, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_k7xg3"]
-atlas = ExtResource("2_560ts")
-region = Rect2(32, 192, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_ue1rd"]
-atlas = ExtResource("2_560ts")
-region = Rect2(64, 192, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_dfuqg"]
-atlas = ExtResource("2_560ts")
-region = Rect2(0, 0, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_dinq3"]
-atlas = ExtResource("2_560ts")
-region = Rect2(32, 0, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_pho4b"]
-atlas = ExtResource("2_560ts")
-region = Rect2(0, 32, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_wrce0"]
-atlas = ExtResource("2_560ts")
-region = Rect2(32, 32, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_udsqh"]
-atlas = ExtResource("2_560ts")
-region = Rect2(0, 64, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_wa5ft"]
-atlas = ExtResource("2_560ts")
-region = Rect2(32, 64, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_hthti"]
-atlas = ExtResource("2_560ts")
-region = Rect2(64, 64, 32, 32)
-
-[sub_resource type="AtlasTexture" id="AtlasTexture_fblhk"]
-atlas = ExtResource("2_560ts")
-region = Rect2(96, 64, 32, 32)
-
-[sub_resource type="SpriteFrames" id="SpriteFrames_gblut"]
-animations = [{
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_pb8mv")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_45kvu")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_h34l7")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_bssj5")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_l6v6i")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_xhkqb")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_yg43x")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_3oymv")
-}],
-"loop": false,
-"name": &"death",
-"speed": 8.0
-}, {
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_r5bla")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_k7xg3")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_ue1rd")
-}],
-"loop": false,
-"name": &"hit",
-"speed": 6.0
-}, {
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_dfuqg")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_dinq3")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_pho4b")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_wrce0")
-}],
-"loop": true,
-"name": &"idle",
-"speed": 5.0
-}, {
-"frames": [{
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_udsqh")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_wa5ft")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_hthti")
-}, {
-"duration": 1.0,
-"texture": SubResource("AtlasTexture_fblhk")
-}],
-"loop": true,
-"name": &"walk",
-"speed": 5.0
-}]
 
 [node name="Player" type="CharacterBody2D"]
 script = ExtResource("1_r33hq")
@@ -179,8 +28,8 @@ zoom = Vector2(2, 2)
 position_smoothing_enabled = true
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
-sprite_frames = SubResource("SpriteFrames_gblut")
-animation = &"death"
+sprite_frames = ExtResource("2_vampire_frames")
+animation = &"idle"
 
 [node name="Sounds" type="Node" parent="."]
 

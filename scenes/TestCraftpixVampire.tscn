@@ -1,0 +1,31 @@
+[gd_scene load_steps=3 format=3 uid="uid://bcraftpix_vampire_test"]
+
+; =============================================================================
+; Escena de prueba: muestra el sprite del vampiro (pack Craftpix 4-direction).
+; Cómo usarla: en el editor, abre esta escena y pulsa "Run Current Scene" (F6)
+; o asigna temporalmente esta escena como Main Scene en Project Settings.
+;
+; Dónde se cargan los assets:
+;   - Texturas: res://assets/craftpix/vampire_4dir/*.png
+;   - Godot las importa al abrir el proyecto (carpeta .godot/imported).
+;
+; Cómo cambiar a otros sprites del mismo pack:
+;   - Vampires2 o Vampires3: copia los PNG de PNG/Vampires2/ o Vampires3/
+;     a assets/craftpix/vampire_4dir/ y actualiza las rutas en
+;     assets/craftpix/vampire_4dir/vampire_sprite_frames.tres
+;   - Para cambiar solo una animación: edita vampire_sprite_frames.tres
+;     y cambia el "atlas" de los AtlasTexture de esa animación a la nueva PNG.
+; =============================================================================
+
+[ext_resource type="Texture2D" path="res://assets/craftpix/vampire_4dir/Vampires1_Idle_with_shadow.png" id="1_tex"]
+
+[node name="TestCraftpixVampire" type="Node2D"]
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+position = Vector2(320, 180)
+texture = ExtResource("1_tex")
+centered = true
+
+[node name="Label" type="Label" parent="."]
+position = Vector2(20, 20)
+text = "Craftpix Vampire (Vampires1 Idle) - Escena de prueba"

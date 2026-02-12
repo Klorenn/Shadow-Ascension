@@ -1,2 +1,11 @@
 # Godot 4+ specific ignores
 .godot/
+
+# Node / web
+node_modules/
+
+# Rust / contracts
+contracts/target/
+
+# OS
+.DS_Store

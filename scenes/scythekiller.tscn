@@ -1,7 +1,7 @@
 [gd_scene load_steps=42 format=3 uid="uid://cmsw0m6iwq22f"]
 
 [ext_resource type="Script" path="res://scripts/Enemy.cs" id="1_w02yg"]
-[ext_resource type="Texture2D" uid="uid://c0rsg63yycimj" path="res://assets/enemies/Bringer-of-Death-SpritSheet.png" id="1_wofkm"]
+[ext_resource type="Texture2D" uid="uid://c0rsg63yycimj" path="res://assets/mobs/Bringer-of-Death-SpritSheet.png" id="1_wofkm"]
 [ext_resource type="PackedScene" uid="uid://dk47m747m1m0x" path="res://scenes/HealthOrb.tscn" id="2_8fhow"]
 [ext_resource type="AudioStream" uid="uid://d2vtwqkpuimpi" path="res://assets/sounds/monster-death-grunt.mp3" id="3_641px"]
 [ext_resource type="PackedScene" uid="uid://b53xqw8m6eehf" path="res://scenes/PowerOrb.tscn" id="3_geilp"]

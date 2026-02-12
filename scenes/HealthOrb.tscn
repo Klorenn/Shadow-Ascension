@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://dk47m747m1m0x"]
 
-[ext_resource type="Texture2D" uid="uid://uwa850o08qas" path="res://assets/pickups/red-orb.png" id="1_jqrmx"]
+[ext_resource type="Texture2D" uid="uid://uwa850o08qas" path="res://assets/level-up/red-orb.png" id="1_jqrmx"]
 [ext_resource type="Script" path="res://scripts/HealthOrb.cs" id="1_qhpbi"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_70bxh"]
