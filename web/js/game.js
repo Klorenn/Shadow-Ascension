@@ -38,7 +38,8 @@ const WEAPON_RANGE = 3;
 const WEAPON_COOLDOWN_MS = 600;
 // Plano del suelo: 320x320 unidades (centrado 0,0). Sin límites artificiales; colisión por imagen.
 const GROUND_SIZE = 320;
-// Ruta base de assets (carpeta web)
+// Ruta base de assets: when served from /web/ use relative "assets",
+// otherwise (root /) use "web/assets".
 function getAssetBase() {
   const path = window.location.pathname;
   if (path.indexOf('/web/') >= 0 || path.endsWith('/web')) return 'assets';
@@ -46,12 +47,8 @@ function getAssetBase() {
 }
 const ASSET_BASE = getAssetBase();
 
-// URL absoluta para assets en /web/assets (evita problemas de ruta relativa)
-function assetUrl(path) {
-  const o = window.location.origin;
-  if (o && (o.startsWith('http://') || o.startsWith('https://')))
-    return o + '/web/assets/' + path.replace(/^\//, '');
-  return ASSET_BASE + '/' + path.replace(/^\//, '');
+function assetUrl(p) {
+  return ASSET_BASE + '/' + p.replace(/^\//, '');
 }
 // Zonas: índice 0..4 → ZONA1.png .. ZONA5.png (assets/map migrados)
 function zoneImageUrl(zoneIndex) {
@@ -1082,6 +1079,7 @@ function getSelectedVampireVariant() {
 }
 
 function main() {
+  console.log('[v0] main() called, ASSET_BASE =', ASSET_BASE);
   const btnStart = document.getElementById('btn-start');
   const btnRestart = document.getElementById('btn-restart');
   const variantBtns = document.querySelectorAll('.variant-btn');
@@ -1097,18 +1095,21 @@ function main() {
   btnStart.addEventListener('click', () => {
     const variant = getSelectedVampireVariant();
     btnStart.disabled = true;
-    btnStart.textContent = 'Cargando…';
+    btnStart.textContent = 'Cargando...';
+    console.log('[v0] Loading textures, variant =', variant);
     loadTextures(variant)
       .then(t => {
+        console.log('[v0] Textures loaded:', Object.keys(t));
         textures = t;
         initThree();
+        console.log('[v0] Three.js initialized, starting game');
         btnStart.textContent = 'Jugar';
         btnStart.disabled = false;
         startGame();
       })
       .catch(err => {
-        console.error('Error cargando assets:', err);
-        btnStart.textContent = 'Error: revisa que el servidor sirva assets (npm start)';
+        console.error('[v0] Error loading assets:', err);
+        btnStart.textContent = 'Error cargando';
         btnStart.disabled = false;
       });
   });

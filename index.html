@@ -1,11 +1,364 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=/web/" />
-  <title>The Purge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Purge — Web</title>
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      background: #0a0a0f;
+      font-family: "Press Start 2P", "Courier New", monospace;
+    }
+    body.menu-open { cursor: none; }
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 0;
+    }
+    #cursor-trail {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 99;
+      pointer-events: none;
+    }
+    #ui {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      padding: 12px 20px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      color: #e0e0e0;
+      text-shadow: 0 0 4px #000;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #ui span { font-size: 14px; }
+    #hud {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      color: #e0e0e0;
+      text-shadow: 0 0 4px #000;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #hud-left { display: flex; flex-direction: column; gap: 6px; }
+    #hud-hp-bar, #hud-xp-bar {
+      width: 160px;
+      height: 12px;
+      background: rgba(0,0,0,0.6);
+      border: 2px solid #444;
+    }
+    #hud-hp-fill { height: 100%; background: #c44; transition: width 0.15s; }
+    #hud-xp-fill { height: 100%; background: linear-gradient(90deg, #2266aa, #44aaff); box-shadow: 0 0 8px #4488ff; transition: width 0.12s ease-out; }
+    #hud-xp-bar.xp-level-up-flash { animation: xp-flash 0.4s ease-out; }
+    @keyframes xp-flash { 0% { box-shadow: 0 0 0 0 rgba(68, 136, 255, 0.8); } 50% { box-shadow: 0 0 12px 4px rgba(68, 136, 255, 0.5); } 100% { box-shadow: 0 0 0 0 transparent; } }
+    #absorb-flash {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse 80% 80% at 50% 50%, transparent 30%, rgba(68, 136, 255, 0.2) 60%, transparent 100%);
+      opacity: 0;
+      z-index: 5;
+      transition: opacity 0.05s ease-out;
+    }
+    #level-up-pulse {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse 90% 90% at 50% 50%, transparent 40%, rgba(100, 150, 255, 0.15) 70%, transparent 100%);
+      opacity: 0;
+      z-index: 4;
+      transition: opacity 0.08s ease-out;
+    }
+    #level-up-pulse.active { opacity: 1; }
+    .weapon-icons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .weapon-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(0,0,0,0.5);
+      border: 2px solid #444;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      overflow: hidden;
+    }
+    .weapon-icon .weapon-name {
+      font-size: 0.35rem;
+      color: #ccc;
+      padding: 2px;
+    }
+    .weapon-icon .weapon-cooldown {
+      width: 100%;
+      height: 6px;
+      background: #222;
+      position: relative;
+    }
+    .weapon-icon .weapon-cooldown-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #4a8;
+      transition: height 0.05s linear;
+    }
+    #hud-level { font-size: 0.5rem; }
+    #hud-right { font-size: 0.55rem; }
+    #level-up-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 90;
+      pointer-events: auto;
+    }
+    #level-up-overlay.show { display: flex; }
+    #level-up-overlay h3 { margin-bottom: 16px; font-size: 0.9rem; }
+    .upgrade-cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 520px; }
+    .upgrade-card {
+      padding: 16px;
+      min-width: 140px;
+      background: #2a2a4e;
+      border: 3px solid #555;
+      cursor: pointer;
+      text-align: center;
+      font-size: 0.5rem;
+      line-height: 1.5;
+    }
+    .upgrade-card:hover { border-color: #8b8; background: #3a3a5e; }
+    .upgrade-card.cursed { border-color: #844; }
+    #menu, #gameover {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.88);
+      color: #fff;
+      z-index: 100;
+      gap: 24px;
+      pointer-events: auto;
+    }
+    #menu .menu-inner, #gameover .menu-inner { position: relative; z-index: 1; }
+    #gameover { display: none; }
+    .menu-inner {
+      text-align: center;
+      max-width: 420px;
+    }
+    #menu h1, #gameover h2 {
+      font-size: clamp(1.25rem, 4vw, 1.75rem);
+      margin-bottom: 8px;
+      text-shadow: 0 0 12px rgba(196, 68, 68, 0.5);
+      letter-spacing: 2px;
+    }
+    #menu .subtitle, #gameover p {
+      opacity: 0.9;
+      font-size: clamp(0.5rem, 2vw, 0.65rem);
+      line-height: 1.8;
+      margin-bottom: 8px;
+    }
+    #menu .controls {
+      font-size: 0.5rem;
+      opacity: 0.7;
+      margin-bottom: 20px;
+    }
+    .menu-label {
+      font-size: 0.5rem;
+      opacity: 0.85;
+      margin-bottom: 10px;
+      display: block;
+    }
+    #variant-select {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 14px 28px;
+      font-size: 0.65rem;
+      font-family: inherit;
+      cursor: none;
+      background: #8b2a2a;
+      color: #fff;
+      border: 3px solid #c44;
+      border-radius: 0;
+      pointer-events: auto;
+      transition: background 0.15s, transform 0.1s;
+      letter-spacing: 1px;
+    }
+    button:hover { background: #c44; transform: scale(1.02); }
+    button:active { transform: scale(0.98); }
+    .variant-btn {
+      padding: 10px 18px;
+      background: #1a1a2e;
+      color: #aaa;
+      border: 2px solid #333;
+    }
+    .variant-btn:hover { background: #2a2a4e; color: #fff; border-color: #555; }
+    .variant-btn.selected { background: #4a2a2a; color: #fff; border-color: #c44; }
+    #btn-start, #btn-restart {
+      font-size: 0.75rem;
+      padding: 16px 36px;
+      background: #6b2020;
+      border-color: #a33;
+    }
+    #btn-start:hover, #btn-restart:hover { background: #a33; border-color: #c44; }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
-<body>
-  <p>Redirigiendo a <a href="/web/">/web/</a>…</p>
+<body class="menu-open">
+  <canvas id="cursor-trail" aria-hidden="true"></canvas>
+  <div id="canvas-container"></div>
+  <div id="menu">
+    <div class="menu-inner">
+      <h1>The Purge</h1>
+      <p class="subtitle">Vampire Survivors style</p>
+      <p class="controls">WASD mover &middot; Enemigos sueltan orbes &middot; Sobrevive.</p>
+      <span class="menu-label">Selecciona vampiro:</span>
+      <div id="variant-select">
+        <button type="button" class="variant-btn" data-variant="1">1</button>
+        <button type="button" class="variant-btn" data-variant="2">2</button>
+        <button type="button" class="variant-btn" data-variant="3">3</button>
+      </div>
+      <button id="btn-start">Jugar</button>
+    </div>
+  </div>
+  <div id="gameover">
+    <div class="menu-inner">
+      <h2>Game Over</h2>
+      <p id="final-time">You Survived: 0s</p>
+      <p id="final-round" style="color:#fc4;">Reached Round: 1</p>
+      <p id="total-kills">Total Kills: 0</p>
+      <button id="btn-restart">Reiniciar partida</button>
+      <button id="btn-menu">Volver al menu</button>
+    </div>
+  </div>
+  <div id="level-up-overlay">
+    <h3>Level Up! Choose an upgrade:</h3>
+    <div class="upgrade-cards" id="upgrade-cards"></div>
+  </div>
+  <div id="boss-health-bar" style="display:none; position:fixed; bottom:60px; left:50%; transform:translateX(-50%); width:320px; z-index:12; pointer-events:none; text-align:center;">
+    <span id="boss-name" style="font-size:0.5rem; color:#f88; display:block; margin-bottom:4px;">BOSS</span>
+    <div style="width:100%; height:14px; background:rgba(0,0,0,0.7); border:2px solid #844;">
+      <div id="boss-hp-fill" style="height:100%; width:100%; background:linear-gradient(90deg,#a22,#e44); transition:width 0.15s;"></div>
+    </div>
+  </div>
+  <div id="hit-flash" aria-hidden="true" style="position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse 80% 80% at 50% 50%, transparent 30%, rgba(200,30,30,0.35) 70%, transparent 100%); opacity:0; z-index:6; transition:opacity 0.08s ease-out;"></div>
+  <div id="absorb-flash" aria-hidden="true"></div>
+  <div id="level-up-pulse" aria-hidden="true"></div>
+  <div id="hud" style="display: none;">
+    <div id="hud-left">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div id="hud-hp-bar" style="flex:1;"><div id="hud-hp-fill" style="width: 100%;"></div></div>
+        <span id="hud-hp-text" style="font-size:0.4rem; color:#e88; white-space:nowrap;">100/100</span>
+      </div>
+      <span id="hud-level">Level 1</span>
+      <div id="hud-xp-bar"><div id="hud-xp-fill" style="width: 0%;"></div></div>
+      <span id="hud-round" style="font-size:0.5rem; color:#fc4;">Round 1</span>
+      <span id="hud-enemies" style="font-size:0.4rem; color:#aaa;">Enemies: 0</span>
+      <span id="hud-difficulty">Difficulty 0</span>
+      <span id="hud-event"></span>
+      <div id="weapon-icons" class="weapon-icons"></div>
+    </div>
+    <div id="hud-right">
+      <span id="hud-time">0:00</span>
+    </div>
+  </div>
+  <div id="ui" style="display: none;">
+    <span id="health">Health: 100</span>
+    <span id="energy">Energy: 0/10</span>
+    <span id="power">Power: 0/100</span>
+    <span id="level">Level: 0</span>
+    <span id="time">Time: 0s</span>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+  <script>
+    (function() {
+      var PIXEL_SIZE = 12, TRAIL_LENGTH = 40, FADE_SPEED = 0.04;
+      var canvas = document.getElementById('cursor-trail');
+      if (!canvas) return;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      var pixels = [], pixelId = 0, lastPos = { x: -999, y: -999 };
+      var raf;
+
+      function runTrail(onlyWhenMenuOpen) {
+        var menu = document.getElementById('menu');
+        var gameover = document.getElementById('gameover');
+        var visible = (menu && menu.style.display !== 'none') || (gameover && gameover.style.display !== 'none');
+        var canvasVisible = canvas.style.display !== 'none';
+        if (onlyWhenMenuOpen && !visible) { raf = requestAnimationFrame(runTrail.bind(null, true)); return; }
+        if (!visible || !canvasVisible) { raf = requestAnimationFrame(runTrail.bind(null, true)); return; }
+
+        var ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.fillStyle = 'rgba(10,10,15,0.12)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        for (var i = 0; i < pixels.length; i++) {
+          var p = pixels[i];
+          p.opacity -= FADE_SPEED;
+          p.age++;
+        }
+        pixels = pixels.filter(function(p) { return p.opacity > 0; });
+        ctx.fillStyle = 'rgba(250,250,250,1)';
+        for (var j = 0; j < pixels.length; j++) {
+          var px = pixels[j];
+          var sizeMult = Math.max(0.3, 1 - px.age / 100);
+          var size = PIXEL_SIZE * sizeMult;
+          ctx.globalAlpha = px.opacity;
+          ctx.fillRect(px.x - size/2, px.y - size/2, size, size);
+        }
+        ctx.globalAlpha = 1;
+        raf = requestAnimationFrame(runTrail.bind(null, true));
+      }
+
+      window.addEventListener('mousemove', function(e) {
+        var x = e.clientX, y = e.clientY;
+        var dx = x - lastPos.x, dy = y - lastPos.y;
+        if (Math.sqrt(dx*dx + dy*dy) < PIXEL_SIZE) return;
+        lastPos.x = x; lastPos.y = y;
+        pixels.push({ id: pixelId++, x: x, y: y, opacity: 1, age: 0 });
+        if (pixels.length > TRAIL_LENGTH) pixels = pixels.slice(-TRAIL_LENGTH);
+      });
+
+      window.addEventListener('resize', function() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      });
+
+      runTrail(true);
+    })();
+  </script>
+  <script type="module" src="web/js/game.js"></script>
 </body>
 </html>
