@@ -12,10 +12,19 @@ import { EffectManager, AutoAttack, XPOrbPool, rollOrbTier, scaleOrbXP, ORB_TIER
 import { SKILL_IDS, createSkillEffect } from './effects/index.js';
 import { Player } from './entities/index.js';
 import { MeleeWeapon, ProjectileWeapon } from './weapons/index.js';
-import { XPSystem, XP, EnemyManager, SpawnSystem, EnemyAISystem, WeaponManager } from './systems/index.js';
+import { XPSystem, XP, EnemyManager, SpawnSystem, EnemyAISystem, WeaponManager, PLAYER } from './systems/index.js';
 import { AlienAnimationSystem } from './systems/AlienAnimationSystem.js';
 import { SlimeAnimationSystem } from './systems/SlimeAnimationSystem.js';
 import { getEnemyType } from './data/index.js';
+import {
+  generatePlayerIdle, generatePlayerWalk,
+  generateSlimeIdle, generateSlimeWalk, generateSlimeRun,
+  generateSlimeAttack, generateSlimeHurt, generateSlimeDeath,
+  generateAlienIdle, generateAlienWalk, generateAlienHurt, generateAlienAttack,
+  generateBossSheet,
+  generateRedOrb, generateGreenOrb, generateBlueOrb,
+  generateGrass, generateZone,
+} from './ProceduralSprites.js';
 
 // --- Constants
 const PLAYER_SPEED = 0.35;
@@ -29,7 +38,8 @@ const WEAPON_RANGE = 3;
 const WEAPON_COOLDOWN_MS = 600;
 // Plano del suelo: 320x320 unidades (centrado 0,0). Sin límites artificiales; colisión por imagen.
 const GROUND_SIZE = 320;
-// Ruta base de assets (carpeta web)
+// Ruta base de assets: when served from /web/ use relative "assets",
+// otherwise (root /) use "web/assets".
 function getAssetBase() {
   const path = window.location.pathname;
   if (path.indexOf('/web/') >= 0 || path.endsWith('/web')) return 'assets';
@@ -37,12 +47,8 @@ function getAssetBase() {
 }
 const ASSET_BASE = getAssetBase();
 
-// URL absoluta para assets en /web/assets (evita problemas de ruta relativa)
-function assetUrl(path) {
-  const o = window.location.origin;
-  if (o && (o.startsWith('http://') || o.startsWith('https://')))
-    return o + '/web/assets/' + path.replace(/^\//, '');
-  return ASSET_BASE + '/' + path.replace(/^\//, '');
+function assetUrl(p) {
+  return ASSET_BASE + '/' + p.replace(/^\//, '');
 }
 // Zonas: índice 0..4 → ZONA1.png .. ZONA5.png (assets/map migrados)
 function zoneImageUrl(zoneIndex) {
@@ -73,6 +79,13 @@ let magnetFullScreenUntil = 0;
 let levelUpSlowMotionUntil = 0;
 let rareDropShakeUntil = 0;
 let rareDropFlashUntil = 0;
+let playerHitCooldownUntil = 0;  // timestamp (seconds) until player can be hit again
+let playerHitShakeUntil = 0;     // screen shake timer on player hit
+let playerKnockbackVel = { x: 0, y: 0 };  // knockback velocity applied to player
+let currentRound = 1;
+let roundTimer = 0;  // seconds elapsed in current round
+const ROUND_DURATION = 60;  // seconds per round
+const CONTACT_RADIUS = 3.5; // distance at which enemies deal contact damage
 let enemies = [];
 let orbs = [];
 let keys = {};
@@ -103,6 +116,31 @@ function pixelFilter(t) {
   if (t.encoding !== undefined) t.encoding = THREE.sRGBEncoding;
   else if (t.colorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/** Create a Three.js texture from an HTMLCanvasElement, applying pixel-art filter. */
+function canvasTex(canvas) {
+  const t = new THREE.CanvasTexture(canvas);
+  pixelFilter(t);
+  return t;
+}
+
+/**
+ * Try loading a file texture; on failure, use a procedural canvas fallback.
+ * @param {THREE.TextureLoader} loader
+ * @param {string} path - url to try loading
+ * @param {Function} fallbackFn - () => HTMLCanvasElement
+ * @param {Function} [postProcess] - optional transform applied after pixelFilter
+ */
+function loadOrFallback(loader, path, fallbackFn, postProcess) {
+  return loader.loadAsync(path)
+    .then(pixelFilter)
+    .then(t => postProcess ? postProcess(t) : t)
+    .catch(() => {
+      const c = fallbackFn();
+      const t = canvasTex(c);
+      return postProcess ? postProcess(t) : t;
+    });
 }
 
 // Spritesheet con 4 direcciones: numFrames columnas, numRows filas (64px cada celda)
@@ -139,84 +177,52 @@ function loadTextures(variant = 1) {
   const v = Math.max(1, Math.min(3, variant));
   const idlePath = `${ASSET_BASE}/player/Vampires${v}_Idle_with_shadow.png`;
   const walkPath = `${ASSET_BASE}/player/Vampires${v}_Walk_with_shadow.png`;
+
+  const playerIdleP = loadOrFallback(loader, idlePath, generatePlayerIdle,
+    t => playerSpriteSheetUV(t, PLAYER_IDLE_FRAMES, PLAYER_IDLE_ROWS));
+  const playerWalkP = loadOrFallback(loader, walkPath, generatePlayerWalk,
+    t => playerSpriteSheetUV(t, PLAYER_WALK_FRAMES, PLAYER_WALK_ROWS));
+
+  const bossP = loadOrFallback(loader,
+    `${ASSET_BASE}/mobs/bringer/Bringer-of-Death-SpritSheet.png`,
+    generateBossSheet);
+
+  const slimeIdleP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Idle.png`, generateSlimeIdle, singleFrameUV64);
+  const slimeWalkP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Walk.png`, generateSlimeWalk, singleFrameUV64);
+  const slimeRunP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Run.png`, generateSlimeRun, singleFrameUV64);
+  const slimeAttackP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Attack.png`, generateSlimeAttack, singleFrameUV64);
+  const slimeHurtP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Hurt.png`, generateSlimeHurt, singleFrameUV64);
+  const slimeDeathP = loadOrFallback(loader, `${ASSET_BASE}/mobs/slime/Death.png`, generateSlimeDeath, singleFrameUV64);
+
+  const alienIdleP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/standard/idle.png`, generateAlienIdle, singleFrameUV64);
+  const alienWalkP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/standard/walk.png`, generateAlienWalk, singleFrameUV64);
+  const alienHurtP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/standard/hurt.png`, generateAlienHurt, singleFrameUV64);
+  const alienAttackP = loadOrFallback(loader, `${ASSET_BASE}/mobs/alien/custom/slash_128.png`, generateAlienAttack, singleFrameUV64);
+
+  const redOrbP = loadOrFallback(loader, `${ASSET_BASE}/level-up/red-orb.png`, generateRedOrb);
+  const greenOrbP = loadOrFallback(loader, `${ASSET_BASE}/level-up/green-orb.png`, generateGreenOrb);
+  const blueOrbP = loadOrFallback(loader, `${ASSET_BASE}/level-up/blue-orb.png`, generateBlueOrb);
+
+  const grassP = loadOrFallback(loader, assetUrl('map/grass.png'), generateGrass);
+
   const zoneLoads = [0, 1, 2, 3, 4].map(i =>
-    loader.loadAsync(zoneImageUrl(i)).then(pixelFilter).catch(() => null)
+    loadOrFallback(loader, zoneImageUrl(i), () => generateZone(i))
   );
-  const slimeIdle = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Idle.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeWalk = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Walk.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeRun = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Run.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeAttack = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Attack.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeHurt = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Hurt.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const slimeDeath = loader
-    .loadAsync(`${ASSET_BASE}/mobs/slime/Death.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienIdle = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/standard/idle.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienWalk = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/standard/walk.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienHurt = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/standard/hurt.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
-  const alienAttack = loader
-    .loadAsync(`${ASSET_BASE}/mobs/alien/custom/slash_128.png`)
-    .then(pixelFilter)
-    .then(singleFrameUV64)
-    .catch(() => null);
+
   return Promise.all([
-    loader.loadAsync(idlePath).then(pixelFilter).then(t => playerSpriteSheetUV(t, PLAYER_IDLE_FRAMES, PLAYER_IDLE_ROWS)),
-    loader.loadAsync(walkPath).then(pixelFilter).then(t => playerSpriteSheetUV(t, PLAYER_WALK_FRAMES, PLAYER_WALK_ROWS)),
-    loader.loadAsync(`${ASSET_BASE}/mobs/bringer/Bringer-of-Death-SpritSheet.png`).then(pixelFilter),
-    slimeIdle,
-    slimeWalk,
-    slimeRun,
-    slimeAttack,
-    slimeHurt,
-    slimeDeath,
-    loader.loadAsync(`${ASSET_BASE}/level-up/red-orb.png`).then(pixelFilter),
-    loader.loadAsync(`${ASSET_BASE}/level-up/green-orb.png`).then(pixelFilter),
-    loader.loadAsync(`${ASSET_BASE}/level-up/blue-orb.png`).then(pixelFilter),
-    loader.loadAsync(assetUrl('map/grass.png')).then(pixelFilter),
-    alienIdle,
-    alienWalk,
-    alienHurt,
-    alienAttack,
+    playerIdleP, playerWalkP, bossP,
+    slimeIdleP, slimeWalkP, slimeRunP, slimeAttackP, slimeHurtP, slimeDeathP,
+    redOrbP, greenOrbP, blueOrbP, grassP,
+    alienIdleP, alienWalkP, alienHurtP, alienAttackP,
     ...zoneLoads
   ]).then(results => {
-    const [playerIdle, playerWalk, enemy, slimeIdleTex, slimeWalkTex, slimeRunTex, slimeAttackTex, slimeHurtTex, slimeDeathTex, redOrb, greenOrb, blueOrb, grass, alienIdleTex, alienWalkTex, alienHurtTex, alienAttackTex, ...zones] = results;
+    const [playerIdle, playerWalk, enemy,
+      slimeIdleTex, slimeWalkTex, slimeRunTex, slimeAttackTex, slimeHurtTex, slimeDeathTex,
+      redOrb, greenOrb, blueOrb, grass,
+      alienIdleTex, alienWalkTex, alienHurtTex, alienAttackTex,
+      ...zones] = results;
     return {
-      playerIdle,
-      playerWalk,
-      enemy,
+      playerIdle, playerWalk, enemy,
       slime: slimeIdleTex,
       slimeIdle: slimeIdleTex,
       slimeWalk: slimeWalkTex,
@@ -224,11 +230,7 @@ function loadTextures(variant = 1) {
       slimeAttack: slimeAttackTex,
       slimeHurt: slimeHurtTex,
       slimeDeath: slimeDeathTex,
-      redOrb,
-      greenOrb,
-      blueOrb,
-      grass,
-      zones,
+      redOrb, greenOrb, blueOrb, grass, zones,
       alienIdle: alienIdleTex,
       alienWalk: alienWalkTex,
       alienHurt: alienHurtTex,
@@ -408,6 +410,78 @@ function dropOrbs(x, y) {
   }
 }
 
+function checkPlayerEnemyCollisions(dt) {
+  if (gameOver) return;
+  const now = performance.now() * 0.001;
+  if (now < playerHitCooldownUntil) {
+    // Apply knockback decay during invulnerability
+    playerKnockbackVel.x *= 0.88;
+    playerKnockbackVel.y *= 0.88;
+    if (Math.abs(playerKnockbackVel.x) < 0.01) playerKnockbackVel.x = 0;
+    if (Math.abs(playerKnockbackVel.y) < 0.01) playerKnockbackVel.y = 0;
+    playerPos.x += playerKnockbackVel.x * 60 * dt;
+    playerPos.y += playerKnockbackVel.y * 60 * dt;
+    // Flash red during invulnerability (blink effect)
+    const blinkOn = Math.floor(now * 10) % 2 === 0;
+    if (playerMesh && playerMesh.material) {
+      playerMesh.material.opacity = blinkOn ? 0.4 : 1.0;
+    }
+    return;
+  }
+  // Reset opacity after invulnerability ends
+  if (playerMesh && playerMesh.material && playerMesh.material.opacity < 1.0) {
+    playerMesh.material.opacity = 1.0;
+    if (playerMesh.material.color) playerMesh.material.color.setHex(0xffffff);
+  }
+
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const dx = e.pos.x - playerPos.x;
+    const dy = e.pos.y - playerPos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < CONTACT_RADIUS) {
+      // Determine contact damage based on enemy type
+      let contactDmg = e.damage || 5;
+      if (e.isBoss) contactDmg = 30;
+      else if (e.type === 'alien') contactDmg = 10;
+      else if (e.type === 'slime') contactDmg = 5;
+
+      // Apply damage to player
+      if (playerEntity) {
+        playerEntity.takeDamage(contactDmg);
+        health = playerEntity.hp;
+        maxHealth = playerEntity.maxHp;
+      } else {
+        health = Math.max(0, health - contactDmg);
+      }
+
+      // Set invulnerability window
+      playerHitCooldownUntil = now + (PLAYER.HIT_INVULNERABILITY_MS / 1000);
+
+      // Knockback: push player away from enemy
+      const kbStr = PLAYER.KNOCKBACK_STRENGTH;
+      const nLen = dist > 0.01 ? dist : 1;
+      playerKnockbackVel.x = (-dx / nLen) * kbStr;
+      playerKnockbackVel.y = (-dy / nLen) * kbStr;
+
+      // Screen shake on hit
+      playerHitShakeUntil = 0.25;
+
+      // Red flash on player mesh
+      if (playerMesh && playerMesh.material && playerMesh.material.color) {
+        playerMesh.material.color.setHex(0xff3333);
+      }
+
+      // Check for death
+      if (health <= 0) {
+        endGame();
+        return;
+      }
+      break; // Only one hit per frame
+    }
+  }
+}
+
 function createOrbSprite(tex) {
   const mat = new THREE.MeshBasicMaterial({
     map: tex,
@@ -513,6 +587,9 @@ function updatePlayer(dt) {
 function updateEnemies(dt) {
   if (!enemyManager || !enemyAISystem) return;
   for (const e of enemies) e.update(dt);
+  // Scale aggression based on enemy count relative to round cap
+  const maxForRound = Math.min(200, 10 + (currentRound - 1) * 8);
+  enemyAISystem.setAggressionFromCount(enemies.length, maxForRound);
   enemyAISystem.update(dt, enemies);
 }
 
@@ -545,6 +622,7 @@ function updateOrbs(dt) {
 function updateSpawn(now) {
   if (!spawnSystem || !difficultyManager) return;
   const elapsedMinutes = elapsedTime / 60;
+  spawnSystem.setRound(currentRound);
   spawnSystem.setSpawnIntervalMultiplier(elapsedMinutes);
   spawnSystem.update(now, elapsedMinutes);
 }
@@ -573,6 +651,18 @@ function updateHUD() {
     if (levelUpFlashTime > 0) xpBarWrap.classList.add('xp-level-up-flash');
     else xpBarWrap.classList.remove('xp-level-up-flash');
   }
+  // HP numbers
+  const hpTextEl = document.getElementById('hud-hp-text');
+  if (hpTextEl) hpTextEl.textContent = Math.ceil(health) + '/' + Math.ceil(maxHealth);
+
+  // Round display
+  const roundEl = document.getElementById('hud-round');
+  if (roundEl) roundEl.textContent = 'Round ' + currentRound;
+
+  // Enemies alive
+  const enemiesEl = document.getElementById('hud-enemies');
+  if (enemiesEl) enemiesEl.textContent = 'Enemies: ' + enemies.filter(e => !e.dead).length;
+
   if (levelEl) levelEl.textContent = 'Level ' + level;
   if (timeEl) timeEl.textContent = formatTime(elapsedTime);
   if (diffEl && difficultyManager) diffEl.textContent = 'Difficulty ' + difficultyManager.getDifficultyLevel();
@@ -581,6 +671,21 @@ function updateHUD() {
     eventEl.textContent = ev ? 'Event: ' + ev.name.replace('_', ' ') : '';
   }
   updateWeaponIcons();
+  updateBossHealthBar();
+}
+
+function updateBossHealthBar() {
+  const bar = document.getElementById('boss-health-bar');
+  const fill = document.getElementById('boss-hp-fill');
+  if (!bar || !fill) return;
+  const boss = enemies.find(e => e.isBoss && !e.dead);
+  if (boss) {
+    bar.style.display = 'block';
+    const ratio = boss.getLifeBarRatio ? boss.getLifeBarRatio() : (boss.maxHp > 0 ? boss.hp / boss.maxHp : 0);
+    fill.style.width = Math.max(0, Math.min(100, ratio * 100)) + '%';
+  } else {
+    bar.style.display = 'none';
+  }
 }
 
 function updateWeaponIcons() {
@@ -609,7 +714,7 @@ function updateWeaponIcons() {
 
 function updateUI() {
   updateHUD();
-  document.getElementById('health').textContent = 'Health: ' + health;
+  document.getElementById('health').textContent = 'HP: ' + Math.ceil(health) + '/' + Math.ceil(maxHealth);
   document.getElementById('energy').textContent = 'Energy: ' + energy + '/10';
   document.getElementById('power').textContent = 'Power: ' + power + '/100';
   document.getElementById('level').textContent = 'Level: ' + level;
@@ -677,10 +782,17 @@ function showLevelUpChoices() {
 
 function endGame() {
   gameOver = true;
+  // Reset player visual state
+  if (playerMesh && playerMesh.material) {
+    playerMesh.material.opacity = 1.0;
+    if (playerMesh.material.color) playerMesh.material.color.setHex(0xffffff);
+  }
   const ft = document.getElementById('final-time');
   const tk = document.getElementById('total-kills');
+  const fr = document.getElementById('final-round');
   if (ft) ft.textContent = 'You Survived: ' + formatTime(elapsedTime);
   if (tk) tk.textContent = 'Total Kills: ' + totalKills;
+  if (fr) fr.textContent = 'Reached Round: ' + currentRound;
   document.getElementById('gameover').style.display = 'flex';
   const cursorEl = document.getElementById('cursor-trail');
   if (cursorEl) cursorEl.style.display = 'block';
@@ -706,11 +818,21 @@ function gameLoop(time = 0) {
     return;
   }
 
-  if (difficultyManager) difficultyManager.update(dt, elapsedTime, level, totalKills);
+  if (difficultyManager) {
+    difficultyManager.setRound(currentRound);
+    difficultyManager.update(dt, elapsedTime, level, totalKills);
+  }
   updatePlayer(dt);
   if (enemyManager) enemies = enemyManager.getActive();
   updateEnemies(dt);
+  checkPlayerEnemyCollisions(dt);
   updateOrbs(dt);
+  // Update round timer
+  roundTimer += rawDt;
+  if (roundTimer >= ROUND_DURATION) {
+    roundTimer -= ROUND_DURATION;
+    currentRound++;
+  }
   const liveEnemies = enemies.filter(e => !e.dead);
   if (playerEntity) {
     playerEntity.x = playerPos.x;
@@ -749,17 +871,32 @@ function gameLoop(time = 0) {
   if (levelUpSlowMotionUntil > 0) levelUpSlowMotionUntil -= rawDt;
   if (rareDropShakeUntil > 0) rareDropShakeUntil -= rawDt;
   if (rareDropFlashUntil > 0) rareDropFlashUntil -= rawDt;
+  if (playerHitShakeUntil > 0) playerHitShakeUntil -= rawDt;
+  const hitShakeIntensity = playerHitShakeUntil > 0 ? 0.6 : 0;
+  const dropShakeIntensity = rareDropShakeUntil > 0 ? 0.2 : 0;
+  const shakeIntensity = Math.max(hitShakeIntensity, dropShakeIntensity);
+  const shakeX = shakeIntensity > 0 ? (Math.random() - 0.5) * shakeIntensity : 0;
+  const shakeY = shakeIntensity > 0 ? (Math.random() - 0.5) * shakeIntensity : 0;
+
+  // Hit red flash overlay
+  const hitFlashEl = document.getElementById('hit-flash');
+  if (hitFlashEl) hitFlashEl.style.opacity = String(playerHitShakeUntil > 0 ? Math.min(1, playerHitShakeUntil / 0.15) : 0);
+
+  // Absorb / rare drop flash
   const flashEl = document.getElementById('absorb-flash');
   const flashOpacity = absorbEffectTime > 0 ? 0.35 * (absorbEffectTime / 0.2)
     : rareDropFlashUntil > 0 ? 0.5 * (rareDropFlashUntil / 0.15) : 0;
   if (flashEl) flashEl.style.opacity = String(flashOpacity);
+
+  // Level-up pulse
   const pulseEl = document.getElementById('level-up-pulse');
   if (pulseEl) pulseEl.classList.toggle('active', levelUpFlashTime > 0);
-  if (playerMesh.material.color) {
+
+  // Player tint on level-up (only if not in hit invulnerability)
+  if (playerMesh.material.color && performance.now() * 0.001 >= playerHitCooldownUntil) {
     playerMesh.material.color.setHex(levelUpFlashTime > 0 ? 0x88aaff : 0xffffff);
   }
-  const shakeX = rareDropShakeUntil > 0 ? (Math.random() - 0.5) * 0.2 : 0;
-  const shakeY = rareDropShakeUntil > 0 ? (Math.random() - 0.5) * 0.2 : 0;
+
   gameLoop.lastDt = dt;
   updateSpawn(time / 1000);
   updateUI();
@@ -782,7 +919,7 @@ function startGame() {
   document.body.classList.remove('menu-open');
 
   xpSystem = new XPSystem();
-  playerEntity = new Player({ hp: 3, maxHp: 3, xp: 0, level: 1 });
+  playerEntity = new Player({ hp: PLAYER.BASE_HP, maxHp: PLAYER.BASE_HP, xp: 0, level: 1 });
   playerEntity.xpToNextLevel = Math.floor(XP.BASE_XP * 1 * XP.XP_SCALE);
   weaponManager = new WeaponManager();
   weaponManager.addWeapon(new MeleeWeapon({ name: 'Slash', damage: 12, cooldown: 1.0, radius: 3.5 }));
@@ -802,6 +939,11 @@ function startGame() {
   magnetFullScreenUntil = 0;
   rareDropShakeUntil = 0;
   rareDropFlashUntil = 0;
+  playerHitCooldownUntil = 0;
+  playerHitShakeUntil = 0;
+  playerKnockbackVel = { x: 0, y: 0 };
+  currentRound = 1;
+  roundTimer = 0;
   totalKills = 0;
   levelUpPaused = false;
   chosenUpgradeIds.clear();
@@ -937,6 +1079,7 @@ function getSelectedVampireVariant() {
 }
 
 function main() {
+  console.log('[v0] main() called, ASSET_BASE =', ASSET_BASE);
   const btnStart = document.getElementById('btn-start');
   const btnRestart = document.getElementById('btn-restart');
   const variantBtns = document.querySelectorAll('.variant-btn');
@@ -952,18 +1095,21 @@ function main() {
   btnStart.addEventListener('click', () => {
     const variant = getSelectedVampireVariant();
     btnStart.disabled = true;
-    btnStart.textContent = 'Cargando…';
+    btnStart.textContent = 'Cargando...';
+    console.log('[v0] Loading textures, variant =', variant);
     loadTextures(variant)
       .then(t => {
+        console.log('[v0] Textures loaded:', Object.keys(t));
         textures = t;
         initThree();
+        console.log('[v0] Three.js initialized, starting game');
         btnStart.textContent = 'Jugar';
         btnStart.disabled = false;
         startGame();
       })
       .catch(err => {
-        console.error('Error cargando assets:', err);
-        btnStart.textContent = 'Error: revisa que el servidor sirva assets (npm start)';
+        console.error('[v0] Error loading assets:', err);
+        btnStart.textContent = 'Error cargando';
         btnStart.disabled = false;
       });
   });

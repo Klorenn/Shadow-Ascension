@@ -36,12 +36,21 @@ export class DifficultyManager {
     this._timeSurvived = 0;
     this._playerLevel = 1;
     this._totalKills = 0;
+    this._round = 1;
     this._enrageSpeedStacks = 0;
     this._lastWaveTime = -999;
     this._eventName = null;
     this._eventEndTime = 0;
     this._eventTriggerThisTick = null;
     this._lastSpawnInterval = BASE_SPAWN_INTERVAL;
+  }
+
+  setRound(round) {
+    this._round = Math.max(1, round);
+  }
+
+  getRound() {
+    return this._round;
   }
 
   /**
@@ -129,7 +138,8 @@ export class DifficultyManager {
     return (
       this._timeSurvived * 0.05 +
       this._playerLevel * 0.1 +
-      this._totalKills * 0.002
+      this._totalKills * 0.002 +
+      (this._round - 1) * 0.8
     );
   }
 

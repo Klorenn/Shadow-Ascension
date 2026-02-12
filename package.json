@@ -3,18 +3,11 @@
   "version": "1.0.0",
   "description": "The Purge - Vampire Survivors style game (web version with Three.js)",
   "scripts": {
-    "start": "npx serve . -p 3000",
-    "dev": "npm run start",
-    "postinstall": "mkdir -p web/lib/three && cp node_modules/three/build/three.module.js web/lib/three/ 2>/dev/null || true",
-    "build:upgrades": "tsc -p web/ts",
-    "build:enemies": "tsc -p web/ts/enemy-system",
-    "sync-assets": "node scripts/sync-assets.js",
-    "build": "npm run sync-assets && npm run build:upgrades && npm run build:enemies"
+    "start": "serve . -p 3000 -s",
+    "dev": "serve . -p 3000 -s"
   },
   "dependencies": {
-    "three": "^0.160.0"
-  },
-  "devDependencies": {
-    "@types/three": "^0.182.0"
+    "serve": "^14.2.4",
+    "three": "^0.182.0"
   }
 }
